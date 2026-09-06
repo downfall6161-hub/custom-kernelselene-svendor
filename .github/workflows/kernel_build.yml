@@ -47,11 +47,12 @@ jobs:
           # Fix ksm_flock inline compilation error
           sed -i 's/inline void ksm_flock/void ksm_flock/g' include/linux/keyslot-manager.h
 
-          # Ultimate fix for all missing headers in devfreq and gpu
-          mkdir -p include/linux
-          find drivers/devfreq -name "*.h" -exec cp {} include/linux/ \;
-          find drivers/gpu -name "*.h" -exec cp {} include/linux/ \;
-
+          # Instead of copying, we will just use -I flags in make for devfreq and gpu
+          # But we still need to fix the `<header.h>` vs `"header.h"` issue if it exists
+          # Let's revert to standard includes
+          find drivers/devfreq/ -type f -name "*.c" -exec sed -i 's/<governor.h>/"governor.h"/g' {} +
+          find drivers/devfreq/ -type f -name "*.c" -exec sed -i 's/<helio-dvfsrc-ipi.h>/"helio-dvfsrc-ipi.h"/g' {} +
+          
           echo "✅ Applied source fixes"
 
       - name: Integrate KernelSU-Next
@@ -97,8 +98,8 @@ jobs:
           echo "CONFIG_WERROR=n" >> .config
 
           echo "🔨 Starting kernel compilation..."
-          # Include include/linux explicitly so copied headers are found for BOTH "header.h" and <header.h>
-          make -j$(nproc --all) KCFLAGS="-Wno-error -fno-stack-protector -Iinclude/linux -I$(pwd)/include/linux" KBUILD_CFLAGS_KERNEL="-Wno-error" KBUILD_CFLAGS="-Wno-error"
+          export EXTRA_INCLUDES="-I$(pwd)/drivers/devfreq -I$(pwd)/drivers/devfreq/helio-dvfsrc-v2 -I$(pwd)/drivers/gpu/drm/mediatek"
+          make -j$(nproc --all) KCFLAGS="-Wno-error -fno-stack-protector $EXTRA_INCLUDES" KBUILD_CFLAGS_KERNEL="-Wno-error" KBUILD_CFLAGS="-Wno-error $EXTRA_INCLUDES"
 
           echo "=== Build result ==="
           ls -la arch/arm64/boot/
