@@ -51,10 +51,7 @@ jobs:
           mkdir -p include/linux
           cp drivers/devfreq/helio-dvfsrc-ipi.h include/linux/ 2>/dev/null || touch include/linux/helio-dvfsrc-ipi.h
 
-          # Disable -Werror=format and -Werror globally in Makefiles
-          find . -name "Makefile*" -exec sed -i 's/-Werror=format/-Wno-format/g' {} +
-          find . -name "Makefile*" -exec sed -i 's/-Werror//g' {} +
-          echo "✅ Applied source & Makefile fixes"
+          echo "✅ Applied source fixes"
 
       - name: Integrate KernelSU-Next
         run: |
@@ -116,7 +113,7 @@ jobs:
           echo "CONFIG_WERROR=n" >> .config
 
           echo "🔨 Starting kernel compilation..."
-          make -j$(nproc --all) KCFLAGS="-Wno-error -fno-stack-protector"
+          make -j$(nproc --all) KCFLAGS="-Wno-error -fno-stack-protector" KBUILD_CFLAGS_KERNEL="-Wno-error" KBUILD_CFLAGS="-Wno-error"
 
           echo "=== Build result ==="
           ls -la arch/arm64/boot/
