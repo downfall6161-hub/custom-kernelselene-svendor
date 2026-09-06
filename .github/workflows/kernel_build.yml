@@ -40,12 +40,14 @@ jobs:
       - name: Fix kernel source bugs
         run: |
           cd kernel
-          # Fix touchscreen header missing
+          # Fix touchscreen header missing (should be raw hex bytes since it's included in an array)
           mkdir -p drivers/input/touchscreen/mediatek/FT8719P/include/firmware
-          echo "static unsigned char g_fw_buf[] = {0};" > drivers/input/touchscreen/mediatek/FT8719P/include/firmware/fw_sample.i
+          echo "0x00" > drivers/input/touchscreen/mediatek/FT8719P/include/firmware/fw_sample.i
 
           # Fix ksm_flock inline compilation error
           sed -i 's/inline void ksm_flock/void ksm_flock/g' include/linux/keyslot-manager.h
+          # Fix blk_crypto_flock inline compilation error
+          sed -i 's/inline void blk_crypto_flock/void blk_crypto_flock/g' include/linux/blk-crypto.h
 
           # Instead of copying, we will just use -I flags in make for devfreq and gpu
           # But we still need to fix the `<header.h>` vs `"header.h"` issue if it exists
