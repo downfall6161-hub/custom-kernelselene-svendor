@@ -36,7 +36,14 @@ jobs:
           git clone --depth=1 https://github.com/techyminati/selene kernel
           cd kernel
           echo "Kernel source cloned successfully"
-          ls -la
+
+      - name: Fix missing touchscreen firmware include
+        run: |
+          cd kernel
+          mkdir -p drivers/input/touchscreen/mediatek/FT8719P/include/firmware
+          touch drivers/input/touchscreen/mediatek/FT8719P/include/firmware/fw_sample.i
+          echo "static unsigned char g_fw_buf[] = {0};" > drivers/input/touchscreen/mediatek/FT8719P/include/firmware/fw_sample.i
+          echo "✅ Touchscreen header fix applied"
 
       - name: Integrate KernelSU-Next
         run: |
@@ -46,7 +53,6 @@ jobs:
             echo "✅ KernelSU directory created"
             ls KernelSU/
           fi
-          # Integrate into defconfig (non-GKI method)
           if [ -f "KernelSU/scripts/integrate-no-kprobe.py" ]; then
             python3 KernelSU/scripts/integrate-no-kprobe.py arch/arm64/configs/selene_defconfig
           else
@@ -65,7 +71,6 @@ jobs:
               chmod +x susfs4ksu/setup.sh
               ./susfs4ksu/setup.sh . || echo "SUSFS setup script failed, applying manually..."
             fi
-            # Manual SUSFS config entries
             echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/selene_defconfig
             echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> arch/arm64/configs/selene_defconfig
             echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> arch/arm64/configs/selene_defconfig
@@ -76,16 +81,7 @@ jobs:
             echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> arch/arm64/configs/selene_defconfig
             echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> arch/arm64/configs/selene_defconfig
             echo "✅ SUSFS config added"
-          else
-            echo "⚠️ SUSFS not available, building without it"
           fi
-
-      - name: Show final defconfig
-        run: |
-          cd kernel
-          echo "=== KernelSU + SUSFS config entries ==="
-          grep -E "CONFIG_K(SU|PROBES)|CONFIG_HAVE_KPROBES|CONFIG_KPROBE" arch/arm64/configs/selene_defconfig || true
-          grep -E "CONFIG_KSU_SUSFS" arch/arm64/configs/selene_defconfig || true
 
       - name: Set up environment and compile
         run: |
@@ -98,41 +94,25 @@ jobs:
           ccache -M 5G
 
           echo "🔧 Generating defconfig..."
-          make O=out selene_defconfig
+          make selene_defconfig
 
           echo "🔨 Starting kernel compilation..."
-          make O=out -j$(nproc --all) 2>&1 | tail -50
+          make -j$(nproc --all)
 
           echo "=== Build result ==="
-          if [ -f "out/arch/arm64/boot/Image.gz" ]; then
-            echo "✅ Image.gz built successfully!"
-            ls -lh out/arch/arm64/boot/Image.gz
-          elif [ -f "out/arch/arm64/boot/Image.gz-dtb" ]; then
-            echo "✅ Image.gz-dtb built successfully!"
-            ls -lh out/arch/arm64/boot/Image.gz-dtb
-          elif [ -f "out/arch/arm64/boot/Image" ]; then
-            echo "✅ Image built successfully!"
-            ls -lh out/arch/arm64/boot/Image
-          else
-            echo "❌ Kernel image not found, checking build errors..."
-            find out/arch/arm64/boot/ -type f 2>/dev/null || echo "No boot files found"
-          fi
+          ls -la arch/arm64/boot/
 
       - name: Create AnyKernel3 flashable ZIP
         run: |
           cd kernel
 
-          # Clone AnyKernel3 template
           git clone --depth=1 https://github.com/osm0sis/AnyKernel3 anykernel
           cd anykernel
 
-          # Clean example files
           rm -rf .git .github modules patch ramdisk LICENSE README.md
 
-          # Configure for Redmi 10 Prime (selene)
           cat > anykernel.sh << 'ANYKERNEL'
           # AnyKernel3 Ramdisk Mod Script
-          # osm0sis @ xda-developers
           properties() { '
           kernel.string=KernelSU-SUSFS Kernel for Redmi 10 Prime (selene)
           do.devicecheck=1
@@ -147,7 +127,6 @@ jobs:
           supported.patchlevels=
           '; }
 
-          # Shell variables
           block=/dev/block/by-name/boot;
           is_slot_device=0;
           ramdisk_compression=auto;
@@ -161,22 +140,18 @@ jobs:
           write_boot;
           ANYKERNEL
 
-          # Copy kernel image
-          if [ -f "../out/arch/arm64/boot/Image.gz-dtb" ]; then
-            cp ../out/arch/arm64/boot/Image.gz-dtb ./
-          elif [ -f "../out/arch/arm64/boot/Image.gz" ]; then
-            cp ../out/arch/arm64/boot/Image.gz ./
-          elif [ -f "../out/arch/arm64/boot/Image" ]; then
-            cp ../out/arch/arm64/boot/Image ./
+          if [ -f "../arch/arm64/boot/Image.gz-dtb" ]; then
+            cp ../arch/arm64/boot/Image.gz-dtb ./
+          elif [ -f "../arch/arm64/boot/Image.gz" ]; then
+            cp ../arch/arm64/boot/Image.gz ./
+          elif [ -f "../arch/arm64/boot/Image" ]; then
+            cp ../arch/arm64/boot/Image ./
           fi
 
-          # Copy DTB if exists
-          find ../out/arch/arm64/boot/dts/ -name "*.dtb" -exec cp {} ./ \; 2>/dev/null || true
+          find ../arch/arm64/boot/dts/ -name "*.dtb" -exec cp {} ./ \; 2>/dev/null || true
 
-          # Create flashable ZIP
           zip -r9 ../KernelSU-SUSFS-selene-$(date +%Y%m%d).zip . -x '*.git*'
           echo "✅ Flashable ZIP created!"
-          ls -lh ../KernelSU-SUSFS-selene-*.zip
 
       - name: Upload kernel ZIP artifact
         uses: actions/upload-artifact@v4
@@ -184,26 +159,4 @@ jobs:
           name: KernelSU-SUSFS-selene-kernel
           path: kernel/KernelSU-SUSFS-selene-*.zip
           retention-days: 30
-
-      - name: Upload kernel image (backup)
-        uses: actions/upload-artifact@v4
-        with:
-          name: kernel-image-raw
-          path: |
-            kernel/out/arch/arm64/boot/Image*
-          retention-days: 30
-          if-no-files-found: ignore
-
-      - name: Build summary
-        run: |
-          echo "============================================"
-          echo "  🔥 Selene Kernel Build Complete! 🔥"
-          echo "============================================"
-          echo ""
-          echo "Device: Redmi 10 Prime (selene)"
-          echo "Features: KernelSU-Next + SUSFS"
-          echo "Date: $(date)"
-          echo ""
-          echo "Download the flashable ZIP from Artifacts tab above"
-          echo "Flash via TWRP or ADB sideload"
-          echo "============================================"
+          if-no-files-found: error
