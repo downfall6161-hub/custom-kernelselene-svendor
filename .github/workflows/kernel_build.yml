@@ -1,4 +1,4 @@
-name: Build Selene Kernel (KernelSU + SUSFS)
+name: Build Selene Kernel (KernelSU)
 
 on:
   workflow_dispatch:
@@ -37,7 +37,7 @@ jobs:
           cd kernel
           echo "Kernel source cloned successfully"
 
-      - name: Fix kernel source bugs (touchscreen, inline & Werror)
+      - name: Fix kernel source bugs (touchscreen, inline & devfreq)
         run: |
           cd kernel
           # Fix touchscreen header missing
@@ -47,9 +47,8 @@ jobs:
           # Fix ksm_flock inline compilation error
           sed -i 's/inline void ksm_flock/void ksm_flock/g' include/linux/keyslot-manager.h
 
-          # Fix helio-dvfsrc-ipi.h path include
-          mkdir -p include/linux
-          cp drivers/devfreq/helio-dvfsrc-ipi.h include/linux/ 2>/dev/null || touch include/linux/helio-dvfsrc-ipi.h
+          # Fix helio-dvfsrc-ipi.h path include (Change < > to " ")
+          sed -i 's/<helio-dvfsrc-ipi.h>/"helio-dvfsrc-ipi.h"/g' drivers/devfreq/helio-dvfsrc-ipi.c
 
           echo "✅ Applied source fixes"
 
@@ -69,27 +68,6 @@ jobs:
             echo "CONFIG_KPROBE_EVENTS=y" >> arch/arm64/configs/selene_defconfig
           fi
           echo "✅ KernelSU-Next integrated"
-
-      - name: Integrate SUSFS (Root Hiding)
-        run: |
-          cd kernel
-          git clone https://gitlab.com/simonpunk/susfs4ksu susfs4ksu || echo "SUSFS clone failed, trying alternative..."
-          if [ -d "susfs4ksu" ]; then
-            if [ -f "susfs4ksu/setup.sh" ]; then
-              chmod +x susfs4ksu/setup.sh
-              ./susfs4ksu/setup.sh . || echo "SUSFS setup script failed, applying manually..."
-            fi
-            echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/selene_defconfig
-            echo "CONFIG_KSU_SUSFS_SUS_PATH=y" >> arch/arm64/configs/selene_defconfig
-            echo "CONFIG_KSU_SUSFS_SUS_MOUNT=y" >> arch/arm64/configs/selene_defconfig
-            echo "CONFIG_KSU_SUSFS_SUS_KSTAT=y" >> arch/arm64/configs/selene_defconfig
-            echo "CONFIG_KSU_SUSFS_SUS_OVERLAYFS=y" >> arch/arm64/configs/selene_defconfig
-            echo "CONFIG_KSU_SUSFS_TRY_UMOUNT=y" >> arch/arm64/configs/selene_defconfig
-            echo "CONFIG_KSU_SUSFS_SPOOF_UNAME=y" >> arch/arm64/configs/selene_defconfig
-            echo "CONFIG_KSU_SUSFS_ENABLE_LOG=y" >> arch/arm64/configs/selene_defconfig
-            echo "CONFIG_KSU_SUSFS_OPEN_REDIRECT=y" >> arch/arm64/configs/selene_defconfig
-            echo "✅ SUSFS config added"
-          fi
 
       - name: Set up environment and compile
         run: |
@@ -130,7 +108,7 @@ jobs:
           cat > anykernel.sh << 'ANYKERNEL'
           # AnyKernel3 Ramdisk Mod Script
           properties() { '
-          kernel.string=KernelSU-SUSFS Kernel for Redmi 10 Prime (selene)
+          kernel.string=KernelSU Kernel for Redmi 10 Prime (selene)
           do.devicecheck=1
           do.modules=0
           do.systemless=1
@@ -166,13 +144,13 @@ jobs:
 
           find ../arch/arm64/boot/dts/ -name "*.dtb" -exec cp {} ./ \; 2>/dev/null || true
 
-          zip -r9 ../KernelSU-SUSFS-selene-$(date +%Y%m%d).zip . -x '*.git*'
+          zip -r9 ../KernelSU-selene-$(date +%Y%m%d).zip . -x '*.git*'
           echo "✅ Flashable ZIP created!"
 
       - name: Upload kernel ZIP artifact
         uses: actions/upload-artifact@v4
         with:
-          name: KernelSU-SUSFS-selene-kernel
-          path: kernel/KernelSU-SUSFS-selene-*.zip
+          name: KernelSU-selene-kernel
+          path: kernel/KernelSU-selene-*.zip
           retention-days: 30
           if-no-files-found: error
