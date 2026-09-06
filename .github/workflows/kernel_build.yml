@@ -40,21 +40,25 @@ jobs:
       - name: Fix kernel source bugs
         run: |
           cd kernel
-          # Fix touchscreen header missing (should be raw hex bytes since it's included in an array)
+          # Fix touchscreen header missing (raw hex for array)
           mkdir -p drivers/input/touchscreen/mediatek/FT8719P/include/firmware
           echo "0x00" > drivers/input/touchscreen/mediatek/FT8719P/include/firmware/fw_sample.i
 
-          # Fix ksm_flock inline compilation error
+          # Fix inline errors
           sed -i 's/inline void ksm_flock/void ksm_flock/g' include/linux/keyslot-manager.h
-          # Fix blk_crypto_flock inline compilation error
           sed -i 's/inline void blk_crypto_flock/void blk_crypto_flock/g' include/linux/blk-crypto.h
 
-          # Instead of copying, we will just use -I flags in make for devfreq and gpu
-          # But we still need to fix the `<header.h>` vs `"header.h"` issue if it exists
-          # Let's revert to standard includes
+          # FIX ALL MEDIATEK HEADERS GLOBALLY
+          # We create a dedicated global include dir so we don't overwrite kernel's include/linux
+          mkdir -p include/mtk_h
+          find drivers/misc/mediatek drivers/gpu/drm/mediatek drivers/devfreq drivers/input/touchscreen/mediatek -type f -name "*.h" -exec cp -n {} include/mtk_h/ \;
+          
+          # Fix exact paths inside the C files that mistakenly use system include <header.h> instead of "header.h"
+          # by letting GCC find them in our new include/mtk_h folder.
           find drivers/devfreq/ -type f -name "*.c" -exec sed -i 's/<governor.h>/"governor.h"/g' {} +
           find drivers/devfreq/ -type f -name "*.c" -exec sed -i 's/<helio-dvfsrc-ipi.h>/"helio-dvfsrc-ipi.h"/g' {} +
-          
+          find drivers/misc/mediatek/ -type f -name "*.c" -exec sed -i 's/<mtk_lp_kernfs.h>/"mtk_lp_kernfs.h"/g' {} +
+
           echo "✅ Applied source fixes"
 
       - name: Integrate KernelSU-Next
@@ -100,7 +104,7 @@ jobs:
           echo "CONFIG_WERROR=n" >> .config
 
           echo "🔨 Starting kernel compilation..."
-          export EXTRA_INCLUDES="-I$(pwd)/drivers/devfreq -I$(pwd)/drivers/devfreq/helio-dvfsrc-v2 -I$(pwd)/drivers/gpu/drm/mediatek"
+          export EXTRA_INCLUDES="-I$(pwd)/include/mtk_h"
           make -j$(nproc --all) KCFLAGS="-Wno-error -fno-stack-protector $EXTRA_INCLUDES" KBUILD_CFLAGS_KERNEL="-Wno-error" KBUILD_CFLAGS="-Wno-error $EXTRA_INCLUDES"
 
           echo "=== Build result ==="
