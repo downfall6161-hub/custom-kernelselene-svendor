@@ -37,13 +37,16 @@ jobs:
           cd kernel
           echo "Kernel source cloned successfully"
 
-      - name: Fix missing touchscreen firmware include
+      - name: Fix kernel source bugs (touchscreen & ksm_flock inline)
         run: |
           cd kernel
+          # Fix touchscreen header missing
           mkdir -p drivers/input/touchscreen/mediatek/FT8719P/include/firmware
-          touch drivers/input/touchscreen/mediatek/FT8719P/include/firmware/fw_sample.i
           echo "static unsigned char g_fw_buf[] = {0};" > drivers/input/touchscreen/mediatek/FT8719P/include/firmware/fw_sample.i
-          echo "✅ Touchscreen header fix applied"
+
+          # Fix ksm_flock inline compilation error
+          sed -i 's/inline void ksm_flock/void ksm_flock/g' include/linux/keyslot-manager.h
+          echo "✅ Applied source fixes"
 
       - name: Integrate KernelSU-Next
         run: |
