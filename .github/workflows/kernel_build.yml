@@ -47,10 +47,12 @@ jobs:
           # Fix ksm_flock inline compilation error
           sed -i 's/inline void ksm_flock/void ksm_flock/g' include/linux/keyslot-manager.h
 
-          # Fix missing header includes by symlinking them to include/linux
-          mkdir -p include/linux
-          cp drivers/devfreq/helio-dvfsrc-ipi.h include/linux/ 2>/dev/null || touch include/linux/helio-dvfsrc-ipi.h
-          cp drivers/devfreq/governor.h include/linux/ 2>/dev/null || touch include/linux/governor.h
+          # Fix missing devfreq headers
+          # Change <header.h> to "header.h" for local headers
+          find drivers/devfreq/ -type f -name "*.c" -exec sed -i 's/<helio-dvfsrc-ipi.h>/"helio-dvfsrc-ipi.h"/g' {} +
+          find drivers/devfreq/ -type f -name "*.c" -exec sed -i 's/<governor.h>/"governor.h"/g' {} +
+          
+          # Just in case, add an include path to KBUILD_CFLAGS later
 
           echo "✅ Applied source fixes"
 
@@ -97,7 +99,7 @@ jobs:
           echo "CONFIG_WERROR=n" >> .config
 
           echo "🔨 Starting kernel compilation..."
-          make -j$(nproc --all) KCFLAGS="-Wno-error -fno-stack-protector" KBUILD_CFLAGS_KERNEL="-Wno-error" KBUILD_CFLAGS="-Wno-error"
+          make -j$(nproc --all) KCFLAGS="-Wno-error -fno-stack-protector -Idrivers/devfreq -Idrivers/devfreq/helio-dvfsrc-v2" KBUILD_CFLAGS_KERNEL="-Wno-error" KBUILD_CFLAGS="-Wno-error"
 
           echo "=== Build result ==="
           ls -la arch/arm64/boot/
