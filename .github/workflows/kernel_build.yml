@@ -37,7 +37,7 @@ jobs:
           cd kernel
           echo "Kernel source cloned successfully"
 
-      - name: Fix kernel source bugs (touchscreen, inline & devfreq)
+      - name: Fix kernel source bugs
         run: |
           cd kernel
           # Fix touchscreen header missing
@@ -47,17 +47,10 @@ jobs:
           # Fix ksm_flock inline compilation error
           sed -i 's/inline void ksm_flock/void ksm_flock/g' include/linux/keyslot-manager.h
 
-          # Fix missing devfreq headers comprehensively
-          # 1. Copy headers to include/linux just in case
+          # Ultimate fix for all missing headers in devfreq and gpu
           mkdir -p include/linux
-          cp drivers/devfreq/helio-dvfsrc-ipi.h include/linux/ 2>/dev/null || touch include/linux/helio-dvfsrc-ipi.h
-          cp drivers/devfreq/governor.h include/linux/ 2>/dev/null || touch include/linux/governor.h
-          
-          # 2. Force the C files to include it as a standard header and we'll provide the include path
-          find drivers/devfreq/ -type f -name "*.c" -exec sed -i 's/"governor.h"/<governor.h>/g' {} +
-          find drivers/devfreq/ -type f -name "*.c" -exec sed -i 's/"helio-dvfsrc-ipi.h"/<helio-dvfsrc-ipi.h>/g' {} +
-          find drivers/devfreq/ -type f -name "*.c" -exec sed -i 's/<governor.h>/<linux\/governor.h>/g' {} +
-          find drivers/devfreq/ -type f -name "*.c" -exec sed -i 's/<helio-dvfsrc-ipi.h>/<linux\/helio-dvfsrc-ipi.h>/g' {} +
+          find drivers/devfreq -name "*.h" -exec cp {} include/linux/ \;
+          find drivers/gpu -name "*.h" -exec cp {} include/linux/ \;
 
           echo "✅ Applied source fixes"
 
@@ -104,7 +97,8 @@ jobs:
           echo "CONFIG_WERROR=n" >> .config
 
           echo "🔨 Starting kernel compilation..."
-          make -j$(nproc --all) KCFLAGS="-Wno-error -fno-stack-protector -Iinclude/linux" KBUILD_CFLAGS_KERNEL="-Wno-error" KBUILD_CFLAGS="-Wno-error"
+          # Include include/linux explicitly so copied headers are found for BOTH "header.h" and <header.h>
+          make -j$(nproc --all) KCFLAGS="-Wno-error -fno-stack-protector -Iinclude/linux -I$(pwd)/include/linux" KBUILD_CFLAGS_KERNEL="-Wno-error" KBUILD_CFLAGS="-Wno-error"
 
           echo "=== Build result ==="
           ls -la arch/arm64/boot/
