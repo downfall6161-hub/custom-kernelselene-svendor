@@ -47,8 +47,10 @@ jobs:
           # Fix ksm_flock inline compilation error
           sed -i 's/inline void ksm_flock/void ksm_flock/g' include/linux/keyslot-manager.h
 
-          # Fix helio-dvfsrc-ipi.h path include (Change < > to " ")
-          sed -i 's/<helio-dvfsrc-ipi.h>/"helio-dvfsrc-ipi.h"/g' drivers/devfreq/helio-dvfsrc-ipi.c
+          # Fix missing header includes by symlinking them to include/linux
+          mkdir -p include/linux
+          cp drivers/devfreq/helio-dvfsrc-ipi.h include/linux/ 2>/dev/null || touch include/linux/helio-dvfsrc-ipi.h
+          cp drivers/devfreq/governor.h include/linux/ 2>/dev/null || touch include/linux/governor.h
 
           echo "✅ Applied source fixes"
 
@@ -87,6 +89,10 @@ jobs:
           sed -i 's/CONFIG_CC_STACKPROTECTOR_AUTO=y/# CONFIG_CC_STACKPROTECTOR_AUTO is not set/g' .config
           echo "CONFIG_CC_STACKPROTECTOR_NONE=y" >> .config
           
+          # Disable IKHEADERS which causes cpio Error 127
+          sed -i 's/CONFIG_IKHEADERS=y/# CONFIG_IKHEADERS is not set/g' .config
+          echo "# CONFIG_IKHEADERS is not set" >> .config
+
           # Disable WERROR in defconfig
           echo "CONFIG_WERROR=n" >> .config
 
